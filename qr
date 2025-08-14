@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Watch to Unlock Wi‑Fi</title>
+  <meta name="theme-color" content="#111827" />
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #111827;
+      --muted: #6b7280;
+      --fg: #e5e7eb;
+      --accent: #60a5fa;
+      --accent-2: #34d399;
+      --danger: #f87171;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 600px at 10% 0%, #0f172a 10%, var(--bg)), radial-gradient(900px 500px at 90% 100%, #0a0f1f 10%, var(--bg));
+      color: var(--fg);
+      display: grid; place-items: center; padding: 24px;
+    }
+    .card {
+      width: 100%; max-width: 720px; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; padding: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+    }
+    h1 { font-size: clamp(22px, 4vw, 34px); margin: 4px 0 10px; letter-spacing: 0.3px; }
+    p { color: var(--muted); margin: 0 0 16px; }
+
+    .video-wrap { position: relative; border-radius: 16px; overflow: hidden; background: #000; }
+    video { width: 100%; height: auto; display: block; }
+
+    .overlay {
+      position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.4));
+    }
+    .play-btn {
+      border: none; border-radius: 999px; padding: 14px 22px; font-size: 16px; font-weight: 700; letter-spacing: .3px;
+      color: #0b1220; background: var(--accent); cursor: pointer; box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    }
+    .hidden { display: none !important; }
+
+    .progress {
+      margin-top: 12px; height: 10px; background: #1f2937; border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);
+    }
+    .bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.3s ease; }
+    .count { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    .unlock {
+      margin-top: 18px; display: grid; gap: 12px; grid-template-columns: 1fr; align-items: center;
+    }
+    .unlock button, .unlock a {
+      width: 100%; border: 1px solid rgba(255,255,255,0.12); background: #0f172a; color: var(--fg);
+      padding: 12px 14px; border-radius: 12px; font-weight: 700; cursor: not-allowed; opacity: 0.6;
+    }
+    .unlock button.ready, .unlock a.ready { cursor: pointer; opacity: 1; background: #0b1220; }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 18px; }
+    @media (min-width: 700px){ .grid { grid-template-columns: 1fr 1fr; } }
+
+    .panel { border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 14px; background: rgba(15,23,42,0.6); }
+    .muted { color: var(--muted); font-size: 14px; }
+    .qr { display: grid; place-items: center; height: 240px; }
+
+    .kv { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
+    .tag { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.15); color: var(--fg); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .copy { border: none; background: #111827; color: var(--fg); padding: 6px 10px; border-radius: 10px; cursor: pointer; }
+
+    .warn { margin-top: 14px; font-size: 13px; color: #fda4af; }
+    .foot { margin-top: 18px; font-size: 12px; color: var(--muted); text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="title">
+    <h1 id="title">Watch 10 seconds to unlock Wi‑Fi</h1>
+    <p>Tap play and keep the video visible. The unlock button will light up after 10 seconds have been watched.</p>
+
+    <section class="video-wrap" aria-label="Reward video">
+      <!-- Replace the src with your own MP4 URL. For best compatibility, host an H.264/AAC MP4. -->
+      <video id="rewardVideo" preload="auto" playsinline webkit-playsinline></video>
+      <div id="overlay" class="overlay">
+        <button id="play" class="play-btn" aria-label="Play video">▶ Play video</button>
+      </div>
+    </section>
+
+    <div class="progress" aria-label="Progress toward unlock">
+      <div id="bar" class="bar" style="width:0%"></div>
+    </div>
+    <p class="muted"><span class="count" id="count">0.0</span>s / 10.0s watched</p>
+
+    <div class="unlock">
+      <button id="unlockBtn" type="button" aria-disabled="true">Get Wi‑Fi</button>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <div class="qr" id="qr"></div>
+        <p class="muted" id="qrHint">QR will appear after unlock.</p>
+      </div>
+      <div class="panel">
+        <div class="kv"><span class="tag">SSID</span><span id="ssid" class="mono"></span><button class="copy" data-copy="ssid">Copy</button></div>
+        <div class="kv" style="margin-top:10px"><span class="tag">Password</span><span id="password" class="mono"></span><button class="copy" data-copy="password">Copy</button></div>
+        <p class="warn">Note: Without a router captive portal, sharing the password outside this page can bypass the gate.</p>
+      </div>
+    </div>
+
+    <p class="foot">© <span id="year"></span> Your Business</p>
+  </main>
+
+  <!-- QRCode library (MIT). If you prefer no CDN, you can inline a minified copy. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-Vx3G6u5GmI3Jv1cGg5Qx5a8v2a0iWwqQf8T2Q8w7zXr1x8m3xVxkO6XxwY6/4o1e5o2m3p9Hj3wQ4LQ5IYyQ3A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    // ====== CONFIGURE THESE ======
+    const CONFIG = {
+      ssid: "YourNetworkName",     // <-- change to your SSID
+      password: "YourPassword123", // <-- change to your password
+      auth: "WPA",                  // WPA | WEP | nopass
+      videoSrc: "video.mp4",        // <-- replace with your hosted MP4 URL
+      requiredSeconds: 10,          // seconds required to unlock
+    };
+    // =============================
+
+    const video = document.getElementById('rewardVideo');
+    const overlay = document.getElementById('overlay');
+    const playBtn = document.getElementById('play');
+    const unlockBtn = document.getElementById('unlockBtn');
+    const bar = document.getElementById('bar');
+    const count = document.getElementById('count');
+    const qrWrap = document.getElementById('qr');
+    const qrHint = document.getElementById('qrHint');
+    const ssidEl = document.getElementById('ssid');
+    const passEl = document.getElementById('password');
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Populate visible SSID/password AFTER unlock only
+    ssidEl.textContent = '••••••••';
+    passEl.textContent = '••••••••';
+
+    // Prepare video element
+    const src = document.createElement('source');
+    src.src = CONFIG.videoSrc;
+    src.type = 'video/mp4';
+    video.appendChild(src);
+
+    // Some browsers block autoplay with sound; require user gesture to start.
+    playBtn.addEventListener('click', async () => {
+      overlay.classList.add('hidden');
+      try {
+        await video.play();
+      } catch (e) {
+        // If still blocked, unhide overlay with a hint
+        overlay.classList.remove('hidden');
+        playBtn.textContent = 'Tap to play';
+      }
+    });
+
+    // Prevent seeking/skipping forward before unlock
+    let lastTime = 0;
+    let watched = 0; // cumulative watched seconds while video is playing and visible
+    let unlocked = false;
+    let visibilityBlocked = false;
+
+    const required = Math.max(0, Number(CONFIG.requiredSeconds) || 10);
+
+    function updateProgressUI() {
+      const clamped = Math.min(watched, required);
+      const pct = required === 0 ? 100 : (clamped / required) * 100;
+      bar.style.width = pct + '%';
+      count.textContent = clamped.toFixed(1);
+      if (!unlocked && clamped >= required) {
+        unlocked = true;
+        unlockBtn.classList.add('ready');
+        unlockBtn.removeAttribute('aria-disabled');
+        unlockBtn.textContent = 'Unlock Wi‑Fi';
+        unlockBtn.style.cursor = 'pointer';
+      }
+    }
+
+    video.addEventListener('seeking', (e) => {
+      if (!unlocked && video.currentTime > lastTime + 0.35) {
+        // Block skipping ahead; snap back
+        video.currentTime = lastTime;
+      }
+    });
+
+    // Track watch time only while video is playing and page is visible
+    let rafId;
+    function tick() {
+      if (!document.hidden && !video.paused && !video.ended) {
+        const now = video.currentTime;
+        // Accumulate only forward progress while visible
+        if (now > lastTime) {
+          watched += (now - lastTime);
+          lastTime = now;
+          updateProgressUI();
+          if (unlocked) { cancelAnimationFrame(rafId); return; }
+        }
+      } else {
+        lastTime = video.currentTime;
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+
+    video.addEventListener('play', () => { lastTime = video.currentTime; cancelAnimationFrame(rafId); tick(); });
+    video.addEventListener('pause', () => { cancelAnimationFrame(rafId); lastTime = video.currentTime; });
+    document.addEventListener('visibilitychange', () => { lastTime = video.currentTime; });
+
+    // Unlock action – reveal QR + credentials and enable copy
+    unlockBtn.addEventListener('click', () => {
+      if (!unlocked) return;
+      // Build WIFI: QR payload
+      const escapeWiFi = (s) => String(s).replace(/([\\;,"])/g, '\\$1');
+      const payload = `WIFI:T:${CONFIG.auth};S:${escapeWiFi(CONFIG.ssid)};P:${escapeWiFi(CONFIG.password)};;`;
+
+      qrWrap.innerHTML = '';
+      new QRCode(qrWrap, {
+        text: payload,
+        width: 220,
+        height: 220,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      qrHint.textContent = 'Point your camera at the QR to join.';
+
+      ssidEl.textContent = CONFIG.ssid;
+      passEl.textContent = CONFIG.password;
+
+      // Enable copy buttons
+      document.querySelectorAll('.copy').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const key = btn.getAttribute('data-copy');
+          const val = key === 'ssid' ? CONFIG.ssid : CONFIG.password;
+          try {
+            await navigator.clipboard.writeText(val);
+            btn.textContent = 'Copied';
+            setTimeout(() => (btn.textContent = 'Copy'), 1500);
+          } catch (e) {
+            alert('Copy failed. Long‑press to select and copy.');
+          }
+        }, { once: true });
+      });
+
+      // Mark button as done
+      unlockBtn.textContent = 'Wi‑Fi Ready';
+      unlockBtn.disabled = true;
+      unlockBtn.classList.remove('ready');
+      unlockBtn.style.opacity = 0.8;
+      unlockBtn.style.cursor = 'default';
+    });
+  </script>
+</body>
+</html>
